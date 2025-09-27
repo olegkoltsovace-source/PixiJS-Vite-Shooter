@@ -7,6 +7,8 @@ import { initCursor } from './systems/cursor.js';
 import { initInput } from './input/input.js';
 import { Balance } from './config/balance.js';
 import { shoot as shootSystem } from './systems/shoot.js';
+import { rollSpawnTimer } from './systems/spawn.js';
+import { initWaves } from './systems/waves.js';
 
 // --- Basic Application Setup ---
 const app = new PIXI.Application({
@@ -127,15 +129,19 @@ function shoot() {
 }
 
 
-function spawnEnemy(difficulty = 1) {
-  // Spawn just inside screen from a random side so telegraph is visible (reduces "cheap" off-screen spawns)
+function spawnEnemy(difficulty = 1, posOverride = null) {
+  // Spawn just inside screen from a given edge position or a random side
   const margin = 6;
-  const side = Math.floor(Math.random() * 4); // 0=L,1=R,2=T,3=B
   const pos = { x: 0, y: 0 };
-  if (side === 0) { pos.x = margin; pos.y = Math.random() * app.screen.height; }
-  if (side === 1) { pos.x = app.screen.width - margin; pos.y = Math.random() * app.screen.height; }
-  if (side === 2) { pos.x = Math.random() * app.screen.width; pos.y = margin; }
-  if (side === 3) { pos.x = Math.random() * app.screen.width; pos.y = app.screen.height - margin; }
+  if (posOverride && typeof posOverride.x === 'number' && typeof posOverride.y === 'number') {
+    pos.x = posOverride.x; pos.y = posOverride.y;
+  } else {
+    const side = Math.floor(Math.random() * 4); // 0=L,1=R,2=T,3=B
+    if (side === 0) { pos.x = margin; pos.y = Math.random() * app.screen.height; }
+    if (side === 1) { pos.x = app.screen.width - margin; pos.y = Math.random() * app.screen.height; }
+    if (side === 2) { pos.x = Math.random() * app.screen.width; pos.y = margin; }
+    if (side === 3) { pos.x = Math.random() * app.screen.width; pos.y = app.screen.height - margin; }
+  }
 
   const spr = new PIXI.Sprite(TEX.enemy);
   spr.anchor.set(0.5);
@@ -307,6 +313,12 @@ function activateAnnihilationAura(options = {}) {
 const hud = initHud(app);
 const { overlay: hudOverlay } = hud;
 
+// Waves director (rush + banner)
+const rush = initWaves();
+const waveBanner = new PIXI.Text('', new PIXI.TextStyle({ fill: '#ff5252', fontSize: 24, fontWeight: '900' }));
+waveBanner.visible = false;
+app.stage.addChild(waveBanner);
+
 // --- Custom Cursor (high-visibility crosshair) ---
 const cursor = initCursor(app);
 
@@ -467,6 +479,10 @@ function addScore(delta = 1, opts = {}) {
   const countForPower = opts.countForPower !== false;
   const prev = game.score;
   setScore(prev + delta);
+  if (delta > 0) {
+    // Count all kills towards rush director
+    rush.onKill(delta);
+  }
   if (countForPower && !game.activePower) {
     game.killProgress += delta;
     if (game.killProgress >= 3) {
@@ -614,9 +630,20 @@ app.ticker.add((delta) => {
   const targetInterval = Math.max(Balance.spawn.intervalMin, Balance.spawn.intervalStart + game.difficultyTime * Balance.spawn.intervalSlopePerSec);
   // Smoothly approach target interval
   game.spawnInterval += (targetInterval - game.spawnInterval) * Math.min(1, dt * 2);
-  if (game.spawnTimer <= 0 && !game.isOver) {
+  if (game.spawnTimer <= 0 && !game.isOver && !rush.isRushActive()) {
     spawnEnemy(difficulty);
-    game.spawnTimer = game.spawnInterval * (Balance.spawn.varianceMin + Math.random() * Balance.spawn.varianceRange) * Balance.spawn.globalMultiplier;
+    game.spawnTimer = rollSpawnTimer(game.spawnInterval);
+  }
+  // Waves: update (may spawn concentrated enemies from one edge) and update banner
+  rush.update(dt, (diff, pos) => spawnEnemy(diff, pos), difficulty, app.screen.width, app.screen.height);
+  {
+    const b = rush.getBanner();
+    waveBanner.visible = !!b.visible;
+    if (b.visible) {
+      waveBanner.text = b.text;
+      waveBanner.x = (app.screen.width - waveBanner.width) / 2;
+      waveBanner.y = 64;
+    }
   }
 
   // Update bullets
