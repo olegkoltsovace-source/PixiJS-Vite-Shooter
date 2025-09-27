@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PixiJS Top-Down Shooter (Vite)</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #0d0f1a;
+      overflow: hidden;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
+        Ubuntu, Cantarell, Droid Sans, Helvetica Neue, Arial, "Noto Sans", sans-serif;
+    }
+    canvas { display: block; }
+    .help {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      color: #a9b4d0;
+      font-size: 12px;
+      user-select: none;
+      opacity: .8;
+    }
+  </style>
+</head>
+<body>
+  <div class="help">
+    WASD to move • Mouse to aim • Hold Left Click or press Space to shoot • R to restart
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
