@@ -284,6 +284,31 @@ function activateTimeSlow(options = {}) {
   return { type: 'timeSlow', g, life, age: 0, slowFactor };
 }
 
+// Dash (Destructive Shield)
+// Active power that:
+// - Draws a red ring around the player
+// - Doubles (configurable) the player's movement speed while active
+// - Instantly destroys enemies whose centers enter the ring radius
+function activateDash(options = {}) {
+  // Guard against missing config by using optional chaining and sane defaults
+  const dashCfg = Balance.dash || {};
+  const life = options.life ?? (dashCfg.duration ?? 5);
+  const radius = options.radius ?? (dashCfg.radius ?? 140);
+  const band = options.band ?? (dashCfg.band ?? 18);
+  const color = options.color ?? (dashCfg.color ?? 0xff4d4f);
+  const speedMul = options.speedMultiplier ?? (dashCfg.speedMultiplier ?? 2.0);
+
+  // Visual ring (additive)
+  const g = new PIXI.Graphics();
+  g.blendMode = PIXI.BLEND_MODES.ADD;
+  fxContainer.addChild(g);
+
+  // Activation feedback (light screen punch in red)
+  triggerPowerFeedback(10, color, 0.10);
+
+  return { type: 'dash', g, life, age: 0, radius, band, color, speedMul };
+}
+
 function activateAnnihilationAura(options = {}) {
   const life = options.life ?? 0.35;
   const endRadius = options.endRadius ?? Math.hypot(app.screen.width, app.screen.height);
@@ -364,25 +389,35 @@ const game = {
 };
 
 function activateNextPower() {
+  // Power cycle (4-step):
+  // 0: Protective Shield (force field)
+  // 1: Time Stop (time slow)
+  // 2: Destructive Shield (Dash)
+  // 3: Annihilation (instant kill-all)
   if (game.activePower) return;
-  const idx = game.powerIndex % 3;
+  const idx = game.powerIndex % 4;
+
   if (idx === 0) {
-    // Shield (active)
+    // Protective Shield (active)
     game.activePower = activateForceField();
     game.powerIndex = 1;
   } else if (idx === 1) {
-    // Aura (instant)
+    // Time Stop (active)
+    game.activePower = activateTimeSlow();
     game.powerIndex = 2;
+  } else if (idx === 2) {
+    // Destructive Shield / Dash (active)
+    game.activePower = activateDash();
+    game.powerIndex = 3;
+  } else {
+    // Annihilation (instant)
+    game.powerIndex = 0;
     setTimeout(() => {
       if (!game.isOver) {
         activateAnnihilationAura();
         game.killProgress = 0;
       }
     }, 0);
-  } else {
-    // Time slow (active)
-    game.activePower = activateTimeSlow();
-    game.powerIndex = 0;
   }
 }
 
@@ -451,8 +486,30 @@ function updateActivePower(dt) {
         p.inside.delete(en);
       }
     }
+  } else if (p.type === 'dash') {
+    // Destructive Shield (Dash): draw red ring and kill contacting enemies
+    p.g.clear();
+    const t = Math.min(1, p.age / p.life);
+    const alpha = 0.7 * (1 - t);
+    p.g.lineStyle(p.band, p.color, alpha);
+    p.g.position.set(player.x, player.y);
+    p.g.drawCircle(0, 0, p.radius);
+
+    // Destroy enemies whose centers lie within the ring radius
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const en = enemies[i];
+      const dx = en.spr.x - player.x;
+      const dy = en.spr.y - player.y;
+      if (dx * dx + dy * dy <= p.radius * p.radius) {
+        explodeAt(en.spr.x, en.spr.y, 0x00c2ff, 26);
+        en.spr.destroy();
+        enemies.splice(i, 1);
+        // Do not count kills during active powers for power progression
+        addScore(1, { countForPower: false });
+      }
+    }
   } else if (p.type === 'timeSlow') {
-    // Subtle visual indicator
+    // Subtle visual indicator for Time Stop
     p.g.clear();
     const t = Math.min(1, p.age / p.life);
     const alpha = 0.22 + 0.18 * (1 - t);
@@ -582,8 +639,10 @@ app.ticker.add((delta) => {
   const len = Math.hypot(mx, my);
   mx /= len; my /= len;
   }
-  player.x += mx * playerState.speed * dt;
-  player.y += my * playerState.speed * dt;
+  // Apply power-based speed multiplier (Dash makes the player faster while active)
+  const speedMul = (game.activePower && game.activePower.type === 'dash') ? (game.activePower.speedMul || 1) : 1;
+  player.x += mx * playerState.speed * speedMul * dt;
+  player.y += my * playerState.speed * speedMul * dt;
   // Apply knockback velocity with damping
   player.x += playerState.vx * dt;
   player.y += playerState.vy * dt;
