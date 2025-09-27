@@ -339,6 +339,15 @@ function activateAnnihilationAura(options = {}) {
 const hud = initHud(app);
 const { overlay: hudOverlay } = hud;
 
+// High score persistence: load at startup and show on HUD. Saved on game over if beaten.
+const HIGH_KEY = 'pixi_topdown_highscore_v1';
+let highScore = 0;
+try {
+  const saved = localStorage.getItem(HIGH_KEY);
+  if (saved != null) highScore = Math.max(0, parseInt(saved, 10) || 0);
+} catch (_) { /* ignore storage access errors */ }
+hud.setHighScore(highScore);
+
 // Waves director (rush + banner)
 const rush = initWaves();
 const waveBanner = new PIXI.Text('', new PIXI.TextStyle({ fill: '#ff5252', fontSize: 24, fontWeight: '900' }));
@@ -581,12 +590,20 @@ function damagePlayer(hitX, hitY, applyKnockback = true) {
 
 function endGame() {
   game.isOver = true;
+  // If current score beats the saved high score, persist it
+  if (game.score > highScore) {
+    highScore = game.score;
+    try { localStorage.setItem(HIGH_KEY, String(highScore)); } catch (_) { /* ignore */ }
+    hud.setHighScore(highScore);
+  }
   hudOverlay.show();
 }
 
 
 function attemptRestart() {
   if (!game.isOver) return;
+  // Show the last high score on restart (in case overlay hid it)
+  hud.setHighScore(highScore);
   // Clear entities
   for (const b of bullets) { b.spr.destroy(); }
   for (const en of enemies) { en.spr.destroy(); }

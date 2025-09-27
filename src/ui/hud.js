@@ -16,6 +16,12 @@ export function initHud(app) {
   const scoreText = new PIXI.Text('0', uiStyle);
   scoreText.x = 16; scoreText.y = 32;
 
+  // High score (left, shown below Score)
+  const highLabel = new PIXI.Text('High', uiStyleSmall);
+  highLabel.x = 16; highLabel.y = 60;
+  const highText = new PIXI.Text('0', uiStyle);
+  highText.x = 16; highText.y = 80;
+
   // Lives and Force Push cooldown (right)
   const livesLabel = new PIXI.Text('Lives', uiStyleSmall);
   const livesText = new PIXI.Text(String(Balance.player.livesStart), uiStyle);
@@ -23,7 +29,7 @@ export function initHud(app) {
   const forceLabel = new PIXI.Text('Force Push', uiStyleSmall);
   const forceText = new PIXI.Text('Ready', uiStyle);
 
-  app.stage.addChild(scoreLabel, scoreText, livesLabel, livesText, forceLabel, forceText);
+  app.stage.addChild(scoreLabel, scoreText, highLabel, highText, livesLabel, livesText, forceLabel, forceText);
 
   // Game Over overlay
   const overlay = new PIXI.Container();
@@ -46,6 +52,10 @@ export function initHud(app) {
     forceText.x = app.screen.width - forceText.width - 16;
     forceText.y = forceLabel.y + 20;
 
+    // Left-side score block remains left-aligned; ensure vertical spacing remains consistent
+    highLabel.x = 16;
+    highText.x = 16;
+
     // Stage hit area mirrors screen size for pointer events
     app.stage.hitArea = new PIXI.Rectangle(0, 0, app.screen.width, app.screen.height);
 
@@ -65,6 +75,10 @@ export function initHud(app) {
     livesText.text = String(value);
     // Re-align right edge since width may change
     livesText.x = app.screen.width - livesText.width - 16;
+  }
+
+  function setHighScore(value) {
+    highText.text = String(value);
   }
 
   function setForceCooldown(seconds) {
@@ -87,5 +101,5 @@ export function initHud(app) {
   // Initial layout
   layout();
 
-  return { setScore, setLives, setForceCooldown, layout, overlay: overlayAPI };
+  return { setScore, setLives, setHighScore, setForceCooldown, layout, overlay: overlayAPI };
 }
