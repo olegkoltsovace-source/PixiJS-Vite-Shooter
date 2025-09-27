@@ -344,8 +344,17 @@ const HIGH_KEY = 'pixi_topdown_highscore_v1';
 let highScore = 0;
 try {
   const saved = localStorage.getItem(HIGH_KEY);
-  if (saved != null) highScore = Math.max(0, parseInt(saved, 10) || 0);
-} catch (_) { /* ignore storage access errors */ }
+  if (saved == null) {
+    // Initialize storage with 0 so the key is created on first load
+    localStorage.setItem(HIGH_KEY, '0');
+    highScore = 0;
+  } else {
+    highScore = Math.max(0, parseInt(saved, 10) || 0);
+  }
+} catch (e) {
+  // If storage access fails, keep in-memory only
+  console.warn('High score storage access failed:', e);
+}
 hud.setHighScore(highScore);
 
 // Waves director (rush + banner)
