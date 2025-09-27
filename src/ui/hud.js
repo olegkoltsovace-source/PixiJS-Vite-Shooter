@@ -2,6 +2,7 @@
 // Provides initHud(app) -> { setScore, setLives, setForceCooldown, layout, overlay }
 
 import * as PIXI from 'pixi.js';
+import { Balance } from '../config/balance.js';
 
 export function initHud(app) {
   // Styles
@@ -17,7 +18,7 @@ export function initHud(app) {
 
   // Lives and Force Push cooldown (right)
   const livesLabel = new PIXI.Text('Lives', uiStyleSmall);
-  const livesText = new PIXI.Text('300', uiStyle);
+  const livesText = new PIXI.Text(String(Balance.player.livesStart), uiStyle);
 
   const forceLabel = new PIXI.Text('Force Push', uiStyleSmall);
   const forceText = new PIXI.Text('Ready', uiStyle);

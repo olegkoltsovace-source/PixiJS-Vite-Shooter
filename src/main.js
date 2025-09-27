@@ -88,7 +88,7 @@ const playerState = {
   radius: Balance.player.radius,
   fireRate: Balance.player.fireRate,
   fireCooldown: 0,
-  lives: 300,
+  lives: Balance.player.livesStart,
   invuln: 0,
   vx: 0,
   vy: 0,
@@ -516,11 +516,11 @@ function attemptRestart() {
 
   // Reset state
   setScore(0);
-  setLives(300);
+  setLives(Balance.player.livesStart);
   player.x = app.screen.width / 2;
   player.y = app.screen.height / 2;
   input.pointer.pos.set(player.x, player.y - 50);
-  playerState.invuln = 1.2;
+  playerState.invuln = Balance.player.invulnDuration;
   playerState.vx = 0; playerState.vy = 0;
   game.spawnInterval = 1.2; game.spawnTimer = 0; game.difficultyTime = 0; game.shake = 0; game.isOver = false;
   hudOverlay.hide();
@@ -892,7 +892,7 @@ app.ticker.add((delta) => {
 });
 
 // Start with a small invulnerability grace period
-playerState.invuln = 1.2;
+playerState.invuln = Balance.player.invulnDuration;
 
 // --- DEBUG/Quality-of-life ---
 // Spawn a few enemies initially to see action fast

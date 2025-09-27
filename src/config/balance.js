@@ -9,6 +9,7 @@ export const Balance = {
     invulnDuration: 1.2,     // seconds after hit
     knockbackImpulse: 420,   // player knockback impulse on damage
     dampingExp: 6,           // exponential damping exponent for velocities
+    livesStart: 30,          // initial lives
   },
 
   bullet: {
