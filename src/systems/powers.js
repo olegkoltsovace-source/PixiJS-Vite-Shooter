@@ -17,6 +17,9 @@ export function initPowers(ctx) {
     triggerPowerFeedback,
   } = ctx;
 
+  // Internal wave FX (cone waves used by Force Push) managed here
+  const waves = [];
+
   function activateForceField(options = {}) {
     const life = options.life ?? 5.0;
     const radius = options.radius ?? 140;
@@ -119,6 +122,80 @@ export function initPowers(ctx) {
     // The main integrates screen shake via triggerPowerFeedback above
   }
 
+  // Spawn a cone wave visual + impulse ring (used by Force Push)
+  function spawnConeWave(x, y, angle, options = {}) {
+    const halfAngle = options.halfAngle ?? (Math.PI / 3);
+    const life = options.life ?? 0.5;
+    const endRadius = options.endRadius ?? 680;
+    const band = options.band ?? 48;
+    const impulse = options.impulse ?? 2400;
+    const color = options.color ?? 0x4caf50;
+
+    const g = new PIXI.Graphics();
+    g.blendMode = PIXI.BLEND_MODES.ADD;
+    g.position.set(x, y);
+    fxContainer.addChild(g);
+
+    const wave = { g, x, y, angle, halfAngle, life, age: 0, endRadius, band, impulse, color, hit: new Set() };
+    waves.push(wave);
+  }
+
+  function updateWaves(dt) {
+    for (let i = waves.length - 1; i >= 0; i--) {
+      const w = waves[i];
+      w.age += dt;
+      const t = Math.min(1, w.age / w.life);
+      const r = t * w.endRadius;
+      const alpha = 0.9 * (1 - t);
+      const start = w.angle - w.halfAngle;
+      const end = w.angle + w.halfAngle;
+
+      // draw wave: filled glowing wedge + bold edge + white highlight
+      w.g.clear();
+      // Soft wedge fill to emphasize the cone area
+      w.g.beginFill(w.color, alpha * 0.22);
+      w.g.moveTo(0, 0);
+      w.g.arc(0, 0, r, start, end);
+      w.g.lineTo(0, 0);
+      w.g.endFill();
+      // Strong colored edge
+      w.g.lineStyle(w.band, w.color, alpha);
+      w.g.moveTo(Math.cos(start) * r, Math.sin(start) * r);
+      w.g.arc(0, 0, r, start, end);
+      // White highlight on the leading edge for extra punch
+      w.g.lineStyle(Math.max(4, w.band * 0.35), 0xffffff, alpha * 0.8);
+      w.g.moveTo(Math.cos(start) * r, Math.sin(start) * r);
+      w.g.arc(0, 0, r, start, end);
+
+      // apply impulse to enemies crossing the wave ring within cone
+      const ux = Math.cos(w.angle);
+      const uy = Math.sin(w.angle);
+      const cosMax = Math.cos(w.halfAngle);
+      for (let j = 0; j < enemies.length; j++) {
+        const en = enemies[j];
+        if (w.hit.has(en)) continue;
+        const dx = en.spr.x - w.x;
+        const dy = en.spr.y - w.y;
+        const dist = Math.hypot(dx, dy) || 0.0001;
+        if (dist < r - w.band || dist > r + w.band) continue;
+        const inv = 1 / dist;
+        const vx = dx * inv, vy = dy * inv;
+        const dot = vx * ux + vy * uy;
+        if (dot >= cosMax) {
+          const push = w.impulse * (1 - t);
+          en.vx += vx * push;
+          en.vy += vy * push;
+          w.hit.add(en);
+        }
+      }
+
+      if (w.age >= w.life) {
+        w.g.destroy();
+        waves.splice(i, 1);
+      }
+    }
+  }
+
   function updateActivePower(dt, game) {
     const p = game.activePower;
     if (!p) return;
@@ -201,5 +278,7 @@ export function initPowers(ctx) {
     activateDash,
     activateAnnihilationAura,
     updateActivePower,
+    spawnConeWave,
+    updateWaves,
   };
 }
