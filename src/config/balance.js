@@ -6,7 +6,7 @@ export const Balance = {
     speed: 280,              // px/s
     radius: 16,              // collision radius
     fireRate: 10,            // bullets per second
-    invulnDuration: 1.2,     // seconds after hit
+    invulnDuration: 0.1,     // seconds after hit
     knockbackImpulse: 420,   // player knockback impulse on damage
     dampingExp: 6,           // exponential damping exponent for velocities
     livesStart: 30,          // initial lives
