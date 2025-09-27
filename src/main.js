@@ -9,6 +9,7 @@ import { Balance } from './config/balance.js';
 import { shoot as shootSystem } from './systems/shoot.js';
 import { rollSpawnTimer } from './systems/spawn.js';
 import { initWaves } from './systems/waves.js';
+import { initPause } from './systems/pause.js';
 
 // --- Basic Application Setup ---
 const app = new PIXI.Application({
@@ -344,6 +345,9 @@ const waveBanner = new PIXI.Text('', new PIXI.TextStyle({ fill: '#ff5252', fontS
 waveBanner.visible = false;
 app.stage.addChild(waveBanner);
 
+// Pause system: encapsulates overlay + auto-pause on tab hide
+const pauser = initPause(app, { label: 'PAUSED' });
+
 // --- Custom Cursor (high-visibility crosshair) ---
 const cursor = initCursor(app);
 
@@ -371,12 +375,17 @@ window.addEventListener('resize', () => {
   const pr = playerState.radius;
   player.x = Math.max(pr, Math.min(app.screen.width - pr, player.x));
   player.y = Math.max(pr, Math.min(app.screen.height - pr, player.y));
+  // Also re-center pause overlay (module provides a layout method)
+  if (pauser && pauser.layout) pauser.layout();
 });
 
 // --- Game State ---
 const game = {
   score: 0,
   isOver: false,
+  // Note: pause state now lives in the pause system; keeping this flag is unnecessary,
+  // but retained here if other systems ever need to query it indirectly.
+  paused: false,
   spawnInterval: 1.2,
   spawnTimer: 0,
   difficultyTime: 0,
@@ -574,6 +583,7 @@ function endGame() {
   game.isOver = true;
   hudOverlay.show();
 }
+
 
 function attemptRestart() {
   if (!game.isOver) return;
