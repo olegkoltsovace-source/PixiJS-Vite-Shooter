@@ -10,6 +10,7 @@ import { shoot as shootSystem } from './systems/shoot.js';
 import { rollSpawnTimer } from './systems/spawn.js';
 import { initWaves } from './systems/waves.js';
 import { initPause } from './systems/pause.js';
+import { initPowers } from './systems/powers.js';
 
 // --- Basic Application Setup ---
 const app = new PIXI.Application({
@@ -274,66 +275,16 @@ function killEnemiesInCone(cx, cy, angle, { halfAngle = Math.PI / 6, maxRange = 
   return killed;
 }
 
-function activateTimeSlow(options = {}) {
-  const life = options.life ?? 5.0;
-  const slowFactor = options.slowFactor ?? 0.2; // 80% slow down
-  const g = new PIXI.Graphics();
-  g.blendMode = PIXI.BLEND_MODES.ADD;
-  fxContainer.addChild(g);
-  // Power activation feedback (flash + camera punch)
-  triggerPowerFeedback(12, 0x4caf50, 0.12);
-  return { type: 'timeSlow', g, life, age: 0, slowFactor };
-}
+function activateTimeSlow(options = {}) { return powers.activateTimeSlow(options); }
 
 // Dash (Destructive Shield)
 // Active power that:
 // - Draws a red ring around the player
 // - Doubles (configurable) the player's movement speed while active
 // - Instantly destroys enemies whose centers enter the ring radius
-function activateDash(options = {}) {
-  // Guard against missing config by using optional chaining and sane defaults
-  const dashCfg = Balance.dash || {};
-  const life = options.life ?? (dashCfg.duration ?? 5);
-  const radius = options.radius ?? (dashCfg.radius ?? 140);
-  const band = options.band ?? (dashCfg.band ?? 18);
-  const color = options.color ?? (dashCfg.color ?? 0xff4d4f);
-  const speedMul = options.speedMultiplier ?? (dashCfg.speedMultiplier ?? 2.0);
+function activateDash(options = {}) { return powers.activateDash(options); }
 
-  // Visual ring (additive)
-  const g = new PIXI.Graphics();
-  g.blendMode = PIXI.BLEND_MODES.ADD;
-  fxContainer.addChild(g);
-
-  // Activation feedback (light screen punch in red)
-  triggerPowerFeedback(10, color, 0.10);
-
-  return { type: 'dash', g, life, age: 0, radius, band, color, speedMul };
-}
-
-function activateAnnihilationAura(options = {}) {
-  const life = options.life ?? 0.35;
-  const endRadius = options.endRadius ?? Math.hypot(app.screen.width, app.screen.height);
-  const band = options.band ?? 34;
-  const color = options.color ?? 0x4caf50;
-
-  // Visual pulse
-  const g = new PIXI.Graphics();
-  g.blendMode = PIXI.BLEND_MODES.ADD;
-  fxContainer.addChild(g);
-  pulses.push({ g, x: player.x, y: player.y, life, age: 0, endRadius, band, color });
-  // Power activation feedback (flash + stronger camera punch)
-  triggerPowerFeedback(18, 0x4caf50, 0.12);
-
-  // Destroy all current enemies, award score without counting for next power
-  for (let i = enemies.length - 1; i >= 0; i--) {
-    const en = enemies[i];
-    explodeAt(en.spr.x, en.spr.y, 0x00c2ff, 36);
-    en.spr.destroy();
-    enemies.splice(i, 1);
-    addScore(1, { countForPower: false });
-  }
-  game.shake = Math.max(game.shake, 18);
-}
+function activateAnnihilationAura(options = {}) { return powers.activateAnnihilationAura(options); }
 
 // --- UI (HUD) ---
 const hud = initHud(app);
@@ -414,6 +365,7 @@ const game = {
   killProgress: 0,
   powerIndex: 0, // 0: shield, 1: aura, 2: time slow
 };
+let powers;
 
 function activateNextPower() {
   // Power cycle (4-step):
@@ -448,110 +400,9 @@ function activateNextPower() {
   }
 }
 
-function activateForceField(options = {}) {
-  const life = options.life ?? 5.0;
-  const radius = options.radius ?? 140;
-  const band = options.band ?? 18;
-  const impulse = options.impulse ?? 900;
-  const color = options.color ?? 0x4caf50;
+function activateForceField(options = {}) { return powers.activateForceField(options); }
 
-  const g = new PIXI.Graphics();
-  g.blendMode = PIXI.BLEND_MODES.ADD;
-  fxContainer.addChild(g);
-  // Power activation feedback (flash + camera punch)
-  triggerPowerFeedback(14, 0x4caf50, 0.12);
-
-  const power = { type: 'forceField', g, life, age: 0, radius, band, impulse, color, inside: new Set() };
-
-  // On activation, push any enemies currently within the radius to just outside the field
-  const margin = 4;
-  for (let i = 0; i < enemies.length; i++) {
-    const en = enemies[i];
-    const dx = en.spr.x - player.x;
-    const dy = en.spr.y - player.y;
-    const dist = Math.hypot(dx, dy) || 0.0001;
-    if (dist < radius) {
-      const nx = dx / dist, ny = dy / dist;
-      const target = radius + margin;
-      en.spr.x = player.x + nx * target;
-      en.spr.y = player.y + ny * target;
-      en.vx += nx * impulse * 0.6;
-      en.vy += ny * impulse * 0.6;
-    }
-  }
-
-  return power;
-}
-
-function updateActivePower(dt) {
-  const p = game.activePower;
-  if (!p) return;
-  p.age += dt;
-
-  if (p.type === 'forceField') {
-    // Visual (ring around player)
-    p.g.clear();
-    const alpha = 0.6 * (1 - Math.min(1, p.age / p.life));
-    p.g.lineStyle(p.band, p.color, alpha);
-    p.g.position.set(player.x, player.y);
-    p.g.drawCircle(0, 0, p.radius);
-
-    // Apply impulse to enemies entering the field
-    for (let i = 0; i < enemies.length; i++) {
-      const en = enemies[i];
-      const dx = en.spr.x - player.x;
-      const dy = en.spr.y - player.y;
-      const dist = Math.hypot(dx, dy) || 0.0001;
-      const wasInside = p.inside.has(en);
-      const isInside = dist <= p.radius;
-      if (isInside && !wasInside) {
-        const nx = dx / dist, ny = dy / dist;
-        en.vx += nx * p.impulse;
-        en.vy += ny * p.impulse;
-        p.inside.add(en);
-      } else if (!isInside && wasInside) {
-        p.inside.delete(en);
-      }
-    }
-  } else if (p.type === 'dash') {
-    // Destructive Shield (Dash): draw red ring and kill contacting enemies
-    p.g.clear();
-    const t = Math.min(1, p.age / p.life);
-    const alpha = 0.7 * (1 - t);
-    p.g.lineStyle(p.band, p.color, alpha);
-    p.g.position.set(player.x, player.y);
-    p.g.drawCircle(0, 0, p.radius);
-
-    // Destroy enemies whose centers lie within the ring radius
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      const en = enemies[i];
-      const dx = en.spr.x - player.x;
-      const dy = en.spr.y - player.y;
-      if (dx * dx + dy * dy <= p.radius * p.radius) {
-        explodeAt(en.spr.x, en.spr.y, 0x00c2ff, 26);
-        en.spr.destroy();
-        enemies.splice(i, 1);
-        // Do not count kills during active powers for power progression
-        addScore(1, { countForPower: false });
-      }
-    }
-  } else if (p.type === 'timeSlow') {
-    // Subtle visual indicator for Time Stop
-    p.g.clear();
-    const t = Math.min(1, p.age / p.life);
-    const alpha = 0.22 + 0.18 * (1 - t);
-    const r = 200 + Math.sin(app.ticker.lastTime * 0.02) * 8;
-    p.g.lineStyle(10, 0x4caf50, alpha);
-    p.g.position.set(player.x, player.y);
-    p.g.drawCircle(0, 0, r);
-  }
-
-  if (p.age >= p.life) {
-    if (p.g) p.g.destroy();
-    game.activePower = null;
-    game.killProgress = 0; // must get 3 new kills after power ends
-  }
-}
+function updateActivePower(dt) { powers.updateActivePower(dt, game); }
 
 function setScore(v) {
   game.score = v;
@@ -576,6 +427,18 @@ function addScore(delta = 1, opts = {}) {
   }
 }
 
+// Initialize powers after score helpers are defined
+powers = initPowers({
+  PIXI,
+  app,
+  fxContainer,
+  player,
+  enemies,
+  pulses,
+  addScore,
+  explodeAt,
+  triggerPowerFeedback,
+});
 function setLives(v) { playerState.lives = v; hud.setLives(v); }
 
 
@@ -631,6 +494,11 @@ function attemptRestart() {
   input.pointer.pos.set(player.x, player.y - 50);
   playerState.invuln = Balance.player.invulnDuration;
   playerState.vx = 0; playerState.vy = 0;
+  // Clear any residual visual state from powers/flashes
+  player.__dashTint = false;
+  player.__dashTintColor = undefined;
+  player.__flashToken = 0;
+  player.tint = 0xffffff;
   game.spawnInterval = 1.2; game.spawnTimer = 0; game.difficultyTime = 0; game.shake = 0; game.isOver = false;
   hudOverlay.hide();
   if (game.activePower && game.activePower.g) { game.activePower.g.destroy(); }
@@ -649,11 +517,30 @@ function getEnemySpeedMultiplier() {
 }
 
 // --- Visual helpers ---
+function desiredPlayerTint() {
+  return player.__dashTint ? (player.__dashTintColor || 0xff4d4f) : 0xffffff;
+}
 function flash(displayObject, colorA = 0xffd166, colorB = 0xffffff, durationMs = 120) {
-  const original = displayObject.tint;
+  // Token-based flash: only the most recent flash can restore the tint.
+  const token = (displayObject.__flashToken || 0) + 1;
+  displayObject.__flashToken = token;
+  // Record an expiry so we can forcibly clear stale flashes if timers are throttled
+  displayObject.__flashUntil = Date.now() + durationMs * 2 + 60;
   displayObject.tint = colorA;
-  setTimeout(() => { displayObject.tint = colorB; }, durationMs);
-  setTimeout(() => { displayObject.tint = original; }, durationMs * 2);
+  setTimeout(() => {
+    if (displayObject.__flashToken === token) displayObject.tint = colorB;
+  }, durationMs);
+  setTimeout(() => {
+    if (displayObject.__flashToken === token) {
+      displayObject.__flashToken = 0;
+      // Restore to the desired base tint (dash red if active, otherwise default)
+      if (displayObject === player) {
+        displayObject.tint = desiredPlayerTint();
+      } else {
+        displayObject.tint = 0xffffff;
+      }
+    }
+  }, durationMs * 2);
 }
 
 // --- Main Update Loop ---
@@ -826,6 +713,14 @@ app.ticker.add((delta) => {
 
   // Active power update
   updateActivePower(dt);
+  // Ensure player tint resets when Dash is not active; clear stale flash if expired
+  if (!player.__dashTint) {
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (!player.__flashToken || (player.__flashUntil && now > player.__flashUntil)) {
+      player.__flashToken = 0;
+      player.tint = 0xffffff;
+    }
+  }
 
   // Pulse rings update (visual only)
   for (let i = pulses.length - 1; i >= 0; i--) {
@@ -963,11 +858,15 @@ app.ticker.add((delta) => {
     }
   }
 
-  // Update player glow halo (soft additive circle around the ship)
-  playerGlow.clear()
-    .beginFill(0x4caf50, 0.25)
-    .drawCircle(player.x, player.y, playerState.radius * 1.6)
-    .endFill();
+  // Update player glow halo (soft additive circle) - red during Dash, green otherwise
+  {
+    const glowColor = player.__dashTint ? (player.__dashTintColor || 0xff4d4f) : 0x4caf50;
+    const glowAlpha = player.__dashTint ? 0.32 : 0.25; // slight emphasis while dashing
+    playerGlow.clear()
+      .beginFill(glowColor, glowAlpha)
+      .drawCircle(player.x, player.y, playerState.radius * 1.6)
+      .endFill();
+  }
 
   // Update muzzle flashes (very short life, scale and alpha decay)
   for (let i = muzzleFlashes.length - 1; i >= 0; i--) {
